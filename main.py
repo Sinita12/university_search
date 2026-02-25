@@ -1,7 +1,9 @@
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from googlesearch import search
+import time
 
 # ----------------------------------
 # Helper Functions
@@ -13,8 +15,8 @@ def fetch_page_text(url):
             soup = BeautifulSoup(resp.text, "html.parser")
             texts = soup.get_text(separator="\n")
             return texts
-    except Exception as e:
-        print("Error fetching:", e)
+    except Exception:
+        return ""
     return ""
 
 def find_key_sentences(text, keywords):
@@ -27,9 +29,6 @@ def find_key_sentences(text, keywords):
                 break
     return found
 
-# ----------------------------------
-# Main Scraping Logic
-# ----------------------------------
 def search_university_info(degree_name, uni_name):
     info = {
         "prerequisites": "",
@@ -43,48 +42,83 @@ def search_university_info(degree_name, uni_name):
         "career_outcomes": f"{uni_name} {degree_name} career outcomes jobs after degree"
     }
 
+    keywords = ["requirement", "eligibility", "admission", "career", "job", "placement"]
+
     for key, q in queries.items():
-        print(f"Searching: {q}")
-        results = list(search(q, num_results=5))
-        
+        try:
+            results = list(search(q, num_results=3))
+        except:
+            results = []
+
         combined_text = ""
         for url in results:
-            txt = fetch_page_text(url)
-            combined_text += txt + "\n"
-        
-        # Extract lines with key words
-        keywords = ["requirement", "must have", "admission", "career", "job"]
+            combined_text += fetch_page_text(url) + "\n"
+            time.sleep(1)  # avoid rate limiting
+
         found = find_key_sentences(combined_text, keywords)
-        info[key] = "\n".join(found[:10])  # take first 10 matching lines
+        info[key] = "\n".join(found[:8])
 
     return info
 
+
 # ----------------------------------
-# Top Universities (hardcoded sample)
+# Top Universities (Sample List)
 # ----------------------------------
 top_unis = [
     "Massachusetts Institute of Technology",
     "Stanford University",
     "University of Oxford",
     "Harvard University",
-    "California Institute of Technology"
-    # You would need a real API or CSV for the actual top 25
+    "California Institute of Technology",
+    "University of Cambridge",
+    "ETH Zurich",
+    "National University of Singapore",
+    "UCL",
+    "Imperial College London"
 ]
 
-# Enter the degree
-degree = input("Enter undergraduate degree (e.g., Computer Science BSc): ")
+# ----------------------------------
+# Streamlit UI
+# ----------------------------------
+st.set_page_config(page_title="University Research Tool", layout="wide")
 
-records = []
-for uni in top_unis:
-    print("Processing", uni)
-    info = search_university_info(degree, uni)
-    records.append({
-        "University": uni,
-        "Prerequisites": info["prerequisites"],
-        "Admission Criteria": info["admission_criteria"],
-        "Career Outcomes": info["career_outcomes"]
-    })
+st.title("🌍 Undergraduate Degree University Research Tool")
+st.write("Search top universities and gather admission + career information.")
 
-df = pd.DataFrame(records)
-df.to_csv("universities_info.csv", index=False)
-print("Saved as universities_info.csv")
+degree = st.text_input("Enter Undergraduate Degree (e.g., Computer Science BSc)")
+num_unis = st.slider("Number of universities to search", 1, len(top_unis), 5)
+
+if st.button("Start Research"):
+    if degree.strip() == "":
+        st.warning("Please enter a degree name.")
+    else:
+        st.info("Researching universities... This may take a few minutes.")
+        
+        records = []
+        progress = st.progress(0)
+
+        selected_unis = top_unis[:num_unis]
+
+        for i, uni in enumerate(selected_unis):
+            st.write(f"Processing {uni}...")
+            info = search_university_info(degree, uni)
+            records.append({
+                "University": uni,
+                "Prerequisites": info["prerequisites"],
+                "Admission Criteria": info["admission_criteria"],
+                "Career Outcomes": info["career_outcomes"]
+            })
+            progress.progress((i + 1) / num_unis)
+
+        df = pd.DataFrame(records)
+
+        st.success("Research Complete!")
+        st.dataframe(df, use_container_width=True)
+
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download CSV",
+            csv,
+            "universities_info.csv",
+            "text/csv"
+        )
