@@ -3,144 +3,142 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-# ----------------------------------
-# Page Config
-# ----------------------------------
-st.set_page_config(page_title="University Research Tool", layout="wide")
+st.set_page_config(page_title="UK CS & Maths Research Tool", layout="wide")
 
 # ----------------------------------
-# Official Admissions Pages
+# Hardcoded Official Course Pages
 # ----------------------------------
-official_pages = {
-    "Massachusetts Institute of Technology":
-        "https://mitadmissions.org/apply/process/",
-    "Stanford University":
-        "https://admission.stanford.edu/apply/",
-    "University of Oxford":
-        "https://www.ox.ac.uk/admissions/undergraduate",
-    "Harvard University":
-        "https://college.harvard.edu/admissions/apply",
-    "California Institute of Technology":
-        "https://www.admissions.caltech.edu/apply",
-    "University of Cambridge":
-        "https://www.undergraduate.study.cam.ac.uk/applying",
-    "ETH Zurich":
-        "https://ethz.ch/en/studies/bachelor/application.html",
-    "National University of Singapore":
-        "https://nus.edu.sg/oam/apply-to-nus",
-    "UCL":
-        "https://www.ucl.ac.uk/prospective-students/undergraduate/apply",
-    "Imperial College London":
-        "https://www.imperial.ac.uk/study/apply/undergraduate/"
+
+course_pages = {
+    "Computer Science": {
+        "University of Oxford":
+            "https://www.ox.ac.uk/admissions/undergraduate/courses/course-listing/computer-science",
+        "University of Cambridge":
+            "https://www.undergraduate.study.cam.ac.uk/courses/computer-science",
+        "Imperial College London":
+            "https://www.imperial.ac.uk/study/courses/undergraduate/computing-beng/",
+        "UCL":
+            "https://www.ucl.ac.uk/prospective-students/undergraduate/degrees/computer-science-bsc",
+        "University of Edinburgh":
+            "https://www.ed.ac.uk/studying/undergraduate/degrees/index.php?action=view&code=G400",
+        "King's College London":
+            "https://www.kcl.ac.uk/study/undergraduate/courses/computer-science-bsc"
+    },
+    "Mathematics": {
+        "University of Oxford":
+            "https://www.ox.ac.uk/admissions/undergraduate/courses/course-listing/mathematics",
+        "University of Cambridge":
+            "https://www.undergraduate.study.cam.ac.uk/courses/mathematics",
+        "Imperial College London":
+            "https://www.imperial.ac.uk/study/courses/undergraduate/mathematics-bsc/",
+        "UCL":
+            "https://www.ucl.ac.uk/prospective-students/undergraduate/degrees/mathematics-bsc",
+        "University of Edinburgh":
+            "https://www.ed.ac.uk/studying/undergraduate/degrees/index.php?action=view&code=G100",
+        "King's College London":
+            "https://www.kcl.ac.uk/study/undergraduate/courses/mathematics-bsc"
+    }
 }
-
-top_unis = list(official_pages.keys())
 
 # ----------------------------------
 # Helper Functions
 # ----------------------------------
-def fetch_page_text(url):
+
+def fetch_page(url):
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
+        headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            return soup.get_text(separator="\n")
-    except Exception:
-        return ""
-    return ""
+            return BeautifulSoup(response.text, "html.parser")
+    except:
+        return None
+    return None
 
 
-def find_key_sentences(text, keywords):
+def extract_section(soup, keywords):
+    if soup is None:
+        return "Could not retrieve information."
+
+    text = soup.get_text(separator="\n")
     lines = text.split("\n")
-    found = []
+
+    results = []
     for line in lines:
         for kw in keywords:
             if kw.lower() in line.lower():
-                cleaned = line.strip()
-                if len(cleaned) > 40:  # avoid very short junk lines
-                    found.append(cleaned)
+                clean = line.strip()
+                if len(clean) > 50:
+                    results.append(clean)
                 break
-    return found
+
+    if not results:
+        return "Not clearly listed on page."
+
+    return "\n".join(results[:6])
 
 
-def search_university_info(degree_name, uni_name):
-    info = {
-        "prerequisites": "",
-        "admission_criteria": "",
-        "career_outcomes": ""
+def get_course_info(course, university):
+    url = course_pages[course][university]
+    soup = fetch_page(url)
+
+    entry_keywords = ["AAA", "A*AA", "A level", "entry requirements", "IB", "requirement"]
+    content_keywords = ["course content", "what you will study", "modules", "curriculum"]
+    career_keywords = ["career", "graduate", "employment", "job", "destination"]
+
+    return {
+        "Entry Requirements": extract_section(soup, entry_keywords),
+        "Course Content": extract_section(soup, content_keywords),
+        "Career Outcomes": extract_section(soup, career_keywords)
     }
 
-    url = official_pages.get(uni_name)
-
-    if not url:
-        return info
-
-    page_text = fetch_page_text(url)
-
-    if page_text == "":
-        return info
-
-    prereq_keywords = ["requirement", "eligibility", "qualification", "subjects"]
-    admission_keywords = ["admission", "selection", "criteria", "apply", "application"]
-    career_keywords = ["career", "employment", "job", "graduate", "placement"]
-
-    info["prerequisites"] = "\n".join(
-        find_key_sentences(page_text, prereq_keywords)[:6]
-    )
-
-    info["admission_criteria"] = "\n".join(
-        find_key_sentences(page_text, admission_keywords)[:6]
-    )
-
-    info["career_outcomes"] = "\n".join(
-        find_key_sentences(page_text, career_keywords)[:6]
-    )
-
-    return info
-
 
 # ----------------------------------
-# Streamlit UI
+# UI
 # ----------------------------------
-st.title("🌍 Undergraduate Degree University Research Tool")
-st.write("Gather official undergraduate admission information directly from university websites.")
 
-degree = st.text_input("Enter Undergraduate Degree (e.g., Computer Science BSc)")
-num_unis = st.slider("Number of universities to search", 1, len(top_unis), 5)
+st.title("🇬🇧 UK Computer Science & Mathematics Research Tool")
+st.write("Structured, official course information from leading UK universities.")
 
-if st.button("Start Research"):
+course_choice = st.selectbox(
+    "Select Course",
+    ["Computer Science", "Mathematics"]
+)
 
-    if degree.strip() == "":
-        st.warning("Please enter a degree name.")
+selected_unis = st.multiselect(
+    "Select Universities",
+    list(course_pages[course_choice].keys()),
+    default=list(course_pages[course_choice].keys())[:3]
+)
+
+if st.button("Research Courses"):
+
+    if not selected_unis:
+        st.warning("Please select at least one university.")
         st.stop()
 
-    st.info("Researching official university pages...")
+    st.info("Gathering official course information...")
 
     records = []
     progress = st.progress(0)
 
-    selected_unis = top_unis[:num_unis]
-
     for i, uni in enumerate(selected_unis):
+
         st.write(f"Processing {uni}...")
 
-        info = search_university_info(degree, uni)
+        info = get_course_info(course_choice, uni)
 
         records.append({
             "University": uni,
-            "Prerequisites": info["prerequisites"] if info["prerequisites"] else "Not found on main admissions page.",
-            "Admission Criteria": info["admission_criteria"] if info["admission_criteria"] else "Not found on main admissions page.",
-            "Career Outcomes": info["career_outcomes"] if info["career_outcomes"] else "Not typically listed on admissions page."
+            "Entry Requirements": info["Entry Requirements"],
+            "Course Content": info["Course Content"],
+            "Career Outcomes": info["Career Outcomes"]
         })
 
-        progress.progress((i + 1) / num_unis)
+        progress.progress((i + 1) / len(selected_unis))
 
     df = pd.DataFrame(records)
 
-    st.success("Research Complete!")
+    st.success("Research Complete.")
     st.dataframe(df, use_container_width=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
@@ -148,6 +146,6 @@ if st.button("Start Research"):
     st.download_button(
         label="Download CSV",
         data=csv,
-        file_name="universities_info.csv",
+        file_name=f"UK_{course_choice}_research.csv",
         mime="text/csv"
     )
